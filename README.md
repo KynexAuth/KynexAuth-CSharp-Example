@@ -401,5 +401,5 @@ AuthConfig.KynexAuthApp.webhook("webhook_id", "param1=value&param2=value");
 This project is licensed under the **MIT License**.
 
 - 🌐 **Website**: [https://kynexauth.com](https://kynexauth.com)
-- 💬 **Discord Support**: [Join Discord](https://discord.gg/kynexauth)
+- 💬 **Discord Support**: [Join Discord](https://discord.gg/upms5k9Sct)
 - 📧 **Support Email**: `support@kynexauth.com`
