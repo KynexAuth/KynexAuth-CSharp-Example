@@ -12,10 +12,10 @@ namespace GuiExample
         // CONFIGURE YOUR APP CREDENTIALS HERE
         // -------------------------------------------------------------
         public static api KynexAuthApp = new api(
-            name: "FFPANEL",
-            ownerid: "QfHnLxr7vkOfEXSTHR",
-            version: "1.0",
-            url: "https://kynexauth.com/api/v1/client"
+            name: "YOUR_APP_NAME",       // App Name from dashboard
+            ownerid: "YOUR_APP_KEY",     // App Key (Owner ID)
+            version: "1.0",              // App Version matching dashboard
+            url: "https://kynexauth.com/api/v1/client" // API Endpoint
         );
 
         private enum AuthMode { UserLogin, LicenseLogin, Register }
