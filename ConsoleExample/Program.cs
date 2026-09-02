@@ -9,8 +9,8 @@ namespace ConsoleExample
     class Program
     {
         static api KynexAuthApp = new api(
-            name: "FXC#PANEL",
-            ownerid: "7lkX4K4g4gqAPDWC9q",
+            name: "YOUR_APP_NAME",
+            ownerid: "YOUR_APP_KEY",
             version: "1.0",
             url: "https://kynexauth.com/api/v1/client"
         );
