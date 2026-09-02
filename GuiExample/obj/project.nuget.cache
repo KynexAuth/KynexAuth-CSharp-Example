@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "CPJ6Fc/cbfw=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Abdullah\\Downloads\\kynexauth\\examples\\cpp\\C# EXAMPLE PROJECT\\GuiExample\\GuiExample.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Abdullah\\.nuget\\packages\\guna.ui2.winforms\\2.0.4.6\\guna.ui2.winforms.2.0.4.6.nupkg.sha512"
+  ],
+  "logs": []
+}

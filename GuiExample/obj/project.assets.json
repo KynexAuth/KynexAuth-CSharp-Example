@@ -1,0 +1,127 @@
+{
+  "version": 4,
+  "targets": {
+    "net48": {
+      "Guna.UI2.WinForms/2.0.4.6": {
+        "type": "package",
+        "frameworkAssemblies": [
+          "System.Design",
+          "System.Management",
+          "System.Web"
+        ],
+        "compile": {
+          "lib/net48/Guna.UI2.dll": {}
+        },
+        "runtime": {
+          "lib/net48/Guna.UI2.dll": {}
+        }
+      }
+    },
+    "net48/win-x64": {
+      "Guna.UI2.WinForms/2.0.4.6": {
+        "type": "package",
+        "frameworkAssemblies": [
+          "System.Design",
+          "System.Management",
+          "System.Web"
+        ],
+        "compile": {
+          "lib/net48/Guna.UI2.dll": {}
+        },
+        "runtime": {
+          "lib/net48/Guna.UI2.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Guna.UI2.WinForms/2.0.4.6": {
+      "sha512": "NYzSJp7e47Cz3NgGCHvzadash8ycmxxUnpLg4Rr/MSYG9WDw0HOoTI4SkbDW+HbACrf6tsWYCuzWkgvjuM/O6w==",
+      "type": "package",
+      "path": "guna.ui2.winforms/2.0.4.6",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.txt",
+        "README.md",
+        "guna.ui2.winforms.2.0.4.6.nupkg.sha512",
+        "guna.ui2.winforms.nuspec",
+        "icon.png",
+        "lib/net40/Guna.UI2.dll",
+        "lib/net45/Guna.UI2.dll",
+        "lib/net461/Guna.UI2.dll",
+        "lib/net472/Guna.UI2.dll",
+        "lib/net48/Guna.UI2.dll",
+        "lib/net6.0-windows7.0/Guna.UI2.dll",
+        "lib/net7.0-windows7.0/Guna.UI2.dll",
+        "lib/netcoreapp3.1/Guna.UI2.dll"
+      ]
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net48": [
+      "Guna.UI2.WinForms >= 2.0.4.6"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Abdullah\\.nuget\\packages\\": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\Abdullah\\Downloads\\kynexauth\\examples\\cpp\\C# EXAMPLE PROJECT\\GuiExample\\GuiExample.csproj",
+      "projectName": "GuiExample",
+      "projectPath": "C:\\Users\\Abdullah\\Downloads\\kynexauth\\examples\\cpp\\C# EXAMPLE PROJECT\\GuiExample\\GuiExample.csproj",
+      "packagesPath": "C:\\Users\\Abdullah\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\Abdullah\\Downloads\\kynexauth\\examples\\cpp\\C# EXAMPLE PROJECT\\GuiExample\\obj\\",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "C:\\Users\\Abdullah\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net48"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net48": {
+          "framework": "net48",
+          "targetAlias": "net48",
+          "projectReferences": {}
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.400"
+    },
+    "frameworks": {
+      "net48": {
+        "framework": "net48",
+        "targetAlias": "net48",
+        "dependencies": {
+          "Guna.UI2.WinForms": {
+            "target": "Package",
+            "version": "[2.0.4.6, )"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.400\\RuntimeIdentifierGraph.json"
+      }
+    },
+    "runtimes": {
+      "win-x64": {
+        "#import": []
+      }
+    }
+  }
+}

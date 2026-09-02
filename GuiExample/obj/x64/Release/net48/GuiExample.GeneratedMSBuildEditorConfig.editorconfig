@@ -1,0 +1,14 @@
+is_global = true
+build_property.ApplicationManifest = app.manifest
+build_property.StartupObject = GuiExample.Program
+build_property.ApplicationDefaultFont = 
+build_property.ApplicationHighDpiMode = 
+build_property.ApplicationUseCompatibleTextRendering = 
+build_property.ApplicationVisualStyles = 
+build_property.RootNamespace = GuiExample
+build_property.ProjectDir = C:\Users\Abdullah\Downloads\kynexauth\examples\cpp\C# EXAMPLE PROJECT\GuiExample\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 
