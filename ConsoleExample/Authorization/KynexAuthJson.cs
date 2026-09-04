@@ -285,4 +285,220 @@ namespace KynexAuth
             }
         }
     }
+
+    /// <summary>
+    /// Pure C# Zero-Dependency Ed25519 Cryptographic Signature Verification & Security Utility.
+    /// Provides tamper-proof digital signature validation and response authenticity checks
+    /// matching KeyAuth's Ed25519 response signing protection.
+    /// </summary>
+    public static class Ed25519
+    {
+        private static readonly System.Numerics.BigInteger Q = System.Numerics.BigInteger.Parse("57896044618658097711785492504343953926634992332820282019728792003956564819949");
+        private static readonly System.Numerics.BigInteger D = System.Numerics.BigInteger.Parse("-4513249062541557336618354741066890300407765322924111283082764333673904202049");
+        private static readonly System.Numerics.BigInteger I = System.Numerics.BigInteger.Parse("19681353557162757614214256054903372064989372047668069245724249055408301937204");
+        private static readonly System.Numerics.BigInteger By = System.Numerics.BigInteger.Parse("46316835694926478169428394003475163141307993866256225615783033603165251855960");
+        private static readonly System.Numerics.BigInteger Bx = System.Numerics.BigInteger.Parse("15112221349535400772501151409588531511454012693041857206046113283949847762202");
+        private static readonly System.Numerics.BigInteger L = System.Numerics.BigInteger.Parse("7237005577332262213973186563042994240857116359379907606001950938285454250989");
+
+        private static byte[] Sha512(byte[] message)
+        {
+            using (var sha512 = System.Security.Cryptography.SHA512.Create())
+            {
+                return sha512.ComputeHash(message);
+            }
+        }
+
+        private static System.Numerics.BigInteger Mod(System.Numerics.BigInteger val, System.Numerics.BigInteger m)
+        {
+            System.Numerics.BigInteger r = val % m;
+            return r < 0 ? r + m : r;
+        }
+
+        private static System.Numerics.BigInteger ExpMod(System.Numerics.BigInteger b, System.Numerics.BigInteger exp, System.Numerics.BigInteger mod)
+        {
+            System.Numerics.BigInteger result = System.Numerics.BigInteger.One;
+            System.Numerics.BigInteger baseVal = Mod(b, mod);
+
+            while (exp > 0)
+            {
+                if (!exp.IsEven)
+                {
+                    result = Mod(result * baseVal, mod);
+                }
+                baseVal = Mod(baseVal * baseVal, mod);
+                exp >>= 1;
+            }
+            return result;
+        }
+
+        private static System.Numerics.BigInteger Inv(System.Numerics.BigInteger x)
+        {
+            return ExpMod(x, Q - 2, Q);
+        }
+
+        private static System.Numerics.BigInteger RecoverX(System.Numerics.BigInteger y)
+        {
+            System.Numerics.BigInteger y2 = y * y;
+            System.Numerics.BigInteger xx = (y2 - 1) * Inv(D * y2 + 1);
+            System.Numerics.BigInteger x = ExpMod(xx, (Q + 3) / 8, Q);
+            if (!Mod(x * x - xx, Q).Equals(System.Numerics.BigInteger.Zero))
+            {
+                x = Mod(x * I, Q);
+            }
+            if (!x.IsEven)
+            {
+                x = Q - x;
+            }
+            return x;
+        }
+
+        private static Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> EdwardsAdd(
+            System.Numerics.BigInteger px, System.Numerics.BigInteger py,
+            System.Numerics.BigInteger qx, System.Numerics.BigInteger qy)
+        {
+            System.Numerics.BigInteger xx = px * qx;
+            System.Numerics.BigInteger yy = py * qy;
+            System.Numerics.BigInteger dtemp = D * xx * yy;
+            System.Numerics.BigInteger x3 = (px * qy + qx * py) * Inv(1 + dtemp);
+            System.Numerics.BigInteger y3 = (py * qy + xx) * Inv(1 - dtemp);
+            return new Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger>(Mod(x3, Q), Mod(y3, Q));
+        }
+
+        private static Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> ScalarMult(
+            Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> pt, System.Numerics.BigInteger scalar)
+        {
+            Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> result =
+                new Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger>(System.Numerics.BigInteger.Zero, System.Numerics.BigInteger.One);
+            Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> current = pt;
+
+            while (scalar > 0)
+            {
+                if (!scalar.IsEven)
+                {
+                    result = EdwardsAdd(result.Item1, result.Item2, current.Item1, current.Item2);
+                }
+                current = EdwardsAdd(current.Item1, current.Item2, current.Item1, current.Item2);
+                scalar >>= 1;
+            }
+            return result;
+        }
+
+        private static System.Numerics.BigInteger DecodeInteger(byte[] b, int offset, int length)
+        {
+            byte[] copy = new byte[length + 1];
+            Buffer.BlockCopy(b, offset, copy, 0, length);
+            return new System.Numerics.BigInteger(copy);
+        }
+
+        private static Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> DecodePoint(byte[] p)
+        {
+            if (p == null || p.Length != 32) return null;
+            byte[] clamped = (byte[])p.Clone();
+            int sign = (clamped[31] >> 7) & 1;
+            clamped[31] &= 0x7F;
+            System.Numerics.BigInteger y = DecodeInteger(clamped, 0, 32);
+            System.Numerics.BigInteger x = RecoverX(y);
+            if (((x.IsEven ? 0 : 1) ^ sign) != 0)
+            {
+                x = Q - x;
+            }
+            return new Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger>(x, y);
+        }
+
+        private static byte[] EncodePoint(Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> pt)
+        {
+            byte[] yBytes = pt.Item2.ToByteArray();
+            byte[] output = new byte[32];
+            Buffer.BlockCopy(yBytes, 0, output, 0, Math.Min(yBytes.Length, 32));
+            if (!pt.Item1.IsEven)
+            {
+                output[31] |= 0x80;
+            }
+            return output;
+        }
+
+        /// <summary>
+        /// Verifies whether the digital signature is valid for the given message body and Ed25519 public key.
+        /// </summary>
+        /// <param name="signature">64-byte signature (R + S)</param>
+        /// <param name="message">Signed payload/data bytes</param>
+        /// <param name="publicKey">32-byte Ed25519 public key</param>
+        /// <returns>True if signature is valid and authentic, false otherwise.</returns>
+        public static bool CheckValid(byte[] signature, byte[] message, byte[] publicKey)
+        {
+            try
+            {
+                if (signature == null || signature.Length != 64) return false;
+                if (publicKey == null || publicKey.Length != 32) return false;
+                if (message == null) return false;
+
+                byte[] rBytes = new byte[32];
+                Buffer.BlockCopy(signature, 0, rBytes, 0, 32);
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> rPt = DecodePoint(rBytes);
+                if (rPt == null) return false;
+
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> aPt = DecodePoint(publicKey);
+                if (aPt == null) return false;
+
+                System.Numerics.BigInteger s = DecodeInteger(signature, 32, 32);
+                if (s >= L) return false;
+
+                byte[] hashInput = new byte[32 + 32 + message.Length];
+                Buffer.BlockCopy(signature, 0, hashInput, 0, 32);
+                Buffer.BlockCopy(publicKey, 0, hashInput, 32, 32);
+                Buffer.BlockCopy(message, 0, hashInput, 64, message.Length);
+
+                byte[] hBytes = Sha512(hashInput);
+                System.Numerics.BigInteger k = DecodeInteger(hBytes, 0, 64);
+                k = Mod(k, L);
+
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> basePoint =
+                    new Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger>(Bx, By);
+
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> sb = ScalarMult(basePoint, s);
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> ka = ScalarMult(aPt, k);
+                Tuple<System.Numerics.BigInteger, System.Numerics.BigInteger> rPlusKa = EdwardsAdd(rPt.Item1, rPt.Item2, ka.Item1, ka.Item2);
+
+                byte[] left = EncodePoint(sb);
+                byte[] right = EncodePoint(rPlusKa);
+
+                if (left.Length != right.Length) return false;
+                int diff = 0;
+                for (int i = 0; i < left.Length; i++)
+                {
+                    diff |= left[i] ^ right[i];
+                }
+                return diff == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Helper to convert hex string to byte array
+        /// </summary>
+        public static byte[] HexToBytes(string hex)
+        {
+            if (string.IsNullOrEmpty(hex)) return new byte[0];
+            hex = hex.Replace("-", "").Replace(" ", "");
+            if (hex.Length % 2 != 0) return new byte[0];
+            byte[] bytes = new byte[hex.Length / 2];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+            }
+            return bytes;
+        }
+
+        /// <summary>
+        /// Helper to convert byte array to hex string
+        /// </summary>
+        public static string BytesToHex(byte[] bytes)
+        {
+            if (bytes == null) return "";
+            return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+        }
+    }
 }
