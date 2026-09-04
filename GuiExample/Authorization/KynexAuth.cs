@@ -6,6 +6,7 @@ using System.Threading;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Diagnostics;
+using System.Text;
 
 namespace KynexAuth
 {
@@ -99,6 +100,9 @@ namespace KynexAuth
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr GetCurrentProcess();
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetCurrentThread();
+
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern ushort GlobalAddAtom(string lpString);
 
@@ -108,13 +112,34 @@ namespace KynexAuth
         [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
         private static extern bool IsDebuggerPresent();
 
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        private static extern bool CheckRemoteDebuggerPresent(IntPtr hProcess, ref bool isDebuggerPresent);
+
+        [DllImport("ntdll.dll", SetLastError = true)]
+        private static extern int NtSetInformationThread(IntPtr ThreadHandle, int ThreadInformationClass, IntPtr ThreadInformation, int ThreadInformationLength);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 
         public string name, ownerid, version, url, seed;
         public string sessionid, enckey;
+        public string ed25519_public_key = ""; // Optional Ed25519 Server Public Key for cryptographic response validation
+        public bool require_ed25519_signature = false;
         public bool activate = false;
         private bool initialized = false;
+
+        public bool enable_anti_debug = true;
+        public bool enable_tool_scanner = true;
+        public bool enable_vm_check = true;
+        public bool enable_hosts_check = true;
+        public bool enable_proxy_check = true;
+
+        private static Thread ban_monitor_thread_ = null;
+        private static bool ban_monitor_running_ = false;
+        private static bool ban_monitor_detected_ = false;
 
         public bool require_pinning = false;
         public bool block_proxy = false;
@@ -221,13 +246,210 @@ namespace KynexAuth
             atomCheckThread.Start();
         }
 
+        private static bool HideThread(IntPtr hThread = default(IntPtr))
+        {
+            try
+            {
+                IntPtr target = hThread == IntPtr.Zero ? GetCurrentThread() : hThread;
+                int status = NtSetInformationThread(target, 0x11 /* ThreadHideFromDebugger */, IntPtr.Zero, 0);
+                return status >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool CheckDebuggerPresent()
+        {
+            try
+            {
+                if (IsDebuggerPresent()) return true;
+                bool isRemote = false;
+                if (CheckRemoteDebuggerPresent(GetCurrentProcess(), ref isRemote) && isRemote) return true;
+                if (Debugger.IsAttached) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public bool CheckBlacklistedTools()
+        {
+            try
+            {
+                string[] blacklistedProcesses = new string[] {
+                    "dnspy", "ilspy", "de4dot", "x64dbg", "x32dbg", "ida", "ida64", "idaq",
+                    "cheatengine", "httpdebugger", "httpdebuggerui", "fiddler", "wireshark",
+                    "processhacker", "scylla", "ollydbg", "reclass", "megadumper", "simpleassemblyexplorer"
+                };
+
+                foreach (Process p in Process.GetProcesses())
+                {
+                    try
+                    {
+                        string pName = p.ProcessName.ToLowerInvariant();
+                        foreach (string blacklisted in blacklistedProcesses)
+                        {
+                            if (pName.Contains(blacklisted))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                string[] blacklistedWindows = new string[] {
+                    "x64dbg", "x32dbg", "Cheat Engine", "HTTP Debugger", "Fiddler", "Wireshark",
+                    "Process Hacker", "dnSpy", "ILSpy", "Scylla", "OllyDbg", "ReClass.NET"
+                };
+
+                foreach (string title in blacklistedWindows)
+                {
+                    if (FindWindow(null, title) != IntPtr.Zero)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public bool CheckVirtualEnvironment()
+        {
+            try
+            {
+                string[] vmArtifacts = new string[] {
+                    "vmware", "virtualbox", "vbox", "qemu", "sandboxie"
+                };
+
+                using (var searcher = new System.Management.ManagementObjectSearcher("Select * from Win32_ComputerSystem"))
+                {
+                    foreach (var item in searcher.Get())
+                    {
+                        string manufacturer = item["Manufacturer"]?.ToString().ToLowerInvariant() ?? "";
+                        string model = item["Model"]?.ToString().ToLowerInvariant() ?? "";
+                        foreach (string artifact in vmArtifacts)
+                        {
+                            if (manufacturer.Contains(artifact) || model.Contains(artifact))
+                                return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public bool CheckHostsOverride(string targetHost)
+        {
+            if (string.IsNullOrEmpty(targetHost)) return false;
+            try
+            {
+                string hostsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers\\etc\\hosts");
+                if (!File.Exists(hostsPath)) return false;
+
+                Uri uri = null;
+                string domain = targetHost;
+                if (Uri.TryCreate(targetHost, UriKind.Absolute, out uri))
+                {
+                    domain = uri.Host;
+                }
+
+                foreach (string rawLine in File.ReadAllLines(hostsPath))
+                {
+                    string line = rawLine;
+                    int idx = line.IndexOf('#');
+                    if (idx >= 0) line = line.Substring(0, idx);
+                    line = line.Trim().ToLowerInvariant();
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    if (line.Contains(domain.ToLowerInvariant()))
+                    {
+                        if (line.Contains("127.0.0.1") || line.Contains("0.0.0.0") || line.Contains("::1"))
+                            return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public bool CheckProxyActive()
+        {
+            try
+            {
+                var proxy = WebRequest.DefaultWebProxy;
+                if (proxy != null)
+                {
+                    Uri testUri = new Uri("http://kynexauth.com");
+                    Uri proxyUri = proxy.GetProxy(testUri);
+                    if (proxyUri != null && proxyUri != testUri)
+                    {
+                        string host = proxyUri.Host.ToLowerInvariant();
+                        if (host == "127.0.0.1" || host == "localhost" || proxyUri.Port == 8888 || proxyUri.Port == 8080)
+                            return true;
+                    }
+                }
+
+                string httpProxy = Environment.GetEnvironmentVariable("HTTP_PROXY");
+                string httpsProxy = Environment.GetEnvironmentVariable("HTTPS_PROXY");
+                string allProxy = Environment.GetEnvironmentVariable("ALL_PROXY");
+                if (!string.IsNullOrEmpty(httpProxy) || !string.IsNullOrEmpty(httpsProxy) || !string.IsNullOrEmpty(allProxy))
+                    return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public bool EvaluateSystemSecurity()
+        {
+            if (enable_anti_debug && CheckDebuggerPresent())
+            {
+                error("Debugger detected! Access denied.");
+                TerminateProcess(GetCurrentProcess(), 1);
+                return false;
+            }
+
+            if (enable_tool_scanner && CheckBlacklistedTools())
+            {
+                error("Reverse engineering / Debugging tool detected! Access denied.");
+                TerminateProcess(GetCurrentProcess(), 1);
+                return false;
+            }
+
+            if (enable_vm_check && CheckVirtualEnvironment())
+            {
+                error("Virtual environment / Sandbox detected! Access denied.");
+                TerminateProcess(GetCurrentProcess(), 1);
+                return false;
+            }
+
+            if (enable_proxy_check && CheckProxyActive())
+            {
+                error("Active proxy / network interceptor detected! Please disable proxy.");
+                TerminateProcess(GetCurrentProcess(), 1);
+                return false;
+            }
+
+            if (enable_hosts_check && CheckHostsOverride(url))
+            {
+                error("Hosts file tampering detected! Access denied.");
+                TerminateProcess(GetCurrentProcess(), 1);
+                return false;
+            }
+
+            return true;
+        }
+
         public void init()
         {
-            if (IsDebuggerPresent())
-            {
-                error("Debugger Detected!");
-                TerminateProcess(GetCurrentProcess(), 1);
-            }
+            // 1. Thread Cloaking
+            HideThread();
+
+            // 2. Evaluate Full Security Suite
+            EvaluateSystemSecurity();
 
             Random random = new Random();
             seed = Guid.NewGuid().ToString("N");
@@ -467,10 +689,59 @@ namespace KynexAuth
             sessionid = "";
         }
 
-        public void start_ban_monitor(int interval_seconds = 45, bool check_session = false, Action on_ban = null) {}
-        public void stop_ban_monitor() {}
-        public bool ban_monitor_running() { return false; }
-        public bool ban_monitor_detected() { return false; }
+        public void start_ban_monitor(int interval_seconds = 45, bool check_session = false, Action on_ban = null)
+        {
+            if (interval_seconds <= 0) interval_seconds = 45;
+            ban_monitor_running_ = true;
+            ban_monitor_detected_ = false;
+
+            ban_monitor_thread_ = new Thread(() =>
+            {
+                HideThread();
+                while (ban_monitor_running_)
+                {
+                    Thread.Sleep(interval_seconds * 1000);
+                    if (!ban_monitor_running_) break;
+
+                    bool violation = CheckDebuggerPresent() || CheckBlacklistedTools();
+                    if (violation)
+                    {
+                        ban_monitor_detected_ = true;
+                        ban_monitor_running_ = false;
+                        if (on_ban != null)
+                        {
+                            try { on_ban(); } catch { }
+                        }
+                        error("Security violation detected during runtime! Application terminated.");
+                        TerminateProcess(GetCurrentProcess(), 1);
+                        break;
+                    }
+
+                    if (check_session && initialized && !string.IsNullOrEmpty(sessionid))
+                    {
+                        try { check(); } catch { }
+                    }
+                }
+            });
+
+            ban_monitor_thread_.IsBackground = true;
+            ban_monitor_thread_.Start();
+        }
+
+        public void stop_ban_monitor()
+        {
+            ban_monitor_running_ = false;
+        }
+
+        public bool ban_monitor_running()
+        {
+            return ban_monitor_running_;
+        }
+
+        public bool ban_monitor_detected()
+        {
+            return ban_monitor_detected_;
+        }
         
         public Tfa enable2fa(string code = "") { return tfa; }
         public Tfa disable2fa(string code = "") { return tfa; }
@@ -575,6 +846,31 @@ namespace KynexAuth
                 using (var httpResponse = (HttpWebResponse)request.GetResponse())
                 using (var streamReader = new StreamReader(httpResponse.GetResponseStream())) {
                     string responseString = streamReader.ReadToEnd();
+
+                    // Optional Ed25519 Cryptographic Signature Check (KeyAuth-style Response Authenticity)
+                    string sigHeader = httpResponse.Headers["x-signature-ed25519"];
+                    string timeHeader = httpResponse.Headers["x-signature-timestamp"];
+                    if (!string.IsNullOrEmpty(sigHeader) && !string.IsNullOrEmpty(ed25519_public_key))
+                    {
+                        byte[] sigBytes = Ed25519.HexToBytes(sigHeader);
+                        byte[] pubBytes = Ed25519.HexToBytes(ed25519_public_key);
+                        string messagePayload = (timeHeader ?? "") + responseString;
+                        byte[] messageBytes = Encoding.UTF8.GetBytes(messagePayload);
+
+                        if (!Ed25519.CheckValid(sigBytes, messageBytes, pubBytes))
+                        {
+                            error("Cryptographic signature validation failed! Response has been tampered with.");
+                            TerminateProcess(GetCurrentProcess(), 1);
+                            return "{\"success\":false,\"message\":\"Tampered response\"}";
+                        }
+                    }
+                    else if (require_ed25519_signature)
+                    {
+                        error("Cryptographic signature required but not provided by server!");
+                        TerminateProcess(GetCurrentProcess(), 1);
+                        return "{\"success\":false,\"message\":\"Missing signature\"}";
+                    }
+
                     debugInfo(json_data, fullUrl, responseString, "");
                     return responseString;
                 }
